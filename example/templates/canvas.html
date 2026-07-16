@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Optimized Canvas Dashboard</title>
     <script type="text/javascript" src="//code.jquery.com/jquery-3.3.1.min.js"></script>
-    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.4/socket.io.js"></script>
+    <script type="text/javascript" src="//cdn.socket.io/4.8.2/socket.io.min.js"></script>
     <style>
         body { font-family: sans-serif; background-color: #222; color: #fff; text-align: center; margin-top: 50px; }
         canvas { background-color: #000; border: 2px solid #555; }
@@ -21,7 +21,12 @@
             
             // Decoupled state
             var latestMessage = "Waiting for data...";
-            var hasNewMessage = false;
+            var hasNewMessage = true;
+
+            socket.on('connect', function() {
+                var data = '{"topic": "test/topic", "qos": 0}';
+                socket.emit('subscribe', data);
+            });
 
             socket.on('mqtt_message', function(data) {
                 latestMessage = data.payload;

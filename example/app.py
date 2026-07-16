@@ -4,8 +4,6 @@ A small Test application to show how to use Flask-MQTT.
 
 """
 import logging
-
-import eventlet
 import json
 from flask import Flask, render_template
 from flask_mqtt import Mqtt
@@ -13,8 +11,6 @@ from flask_socketio import SocketIO
 from flask_bootstrap import Bootstrap
 # if SSL enabled
 # from flask_mqtt import ssl
-
-eventlet.monkey_patch()
 
 app = Flask(__name__)
 app.config['SECRET'] = 'my secret key'
@@ -49,7 +45,7 @@ app.config['MQTT_LAST_WILL_QOS'] = 0
 # app.config['MQTT_TLS_CERT_REQS'] = True
 
 
-mqtt = Mqtt(app)
+mqtt = Mqtt()
 socketio = SocketIO(app)
 bootstrap = Bootstrap(app)
 
@@ -71,8 +67,13 @@ def handle_publish(json_str):
 
 @socketio.on('subscribe')
 def handle_subscribe(json_str):
-    data = json.loads(json_str)
-    mqtt.subscribe(data['topic'], data['qos'])
+    print(f"DEBUG: socketio subscribe event fired! Data received: {json_str}")
+    try:
+        data = json.loads(json_str)
+        print(f"DEBUG: Parsed JSON correctly, subscribing to MQTT topic: {data['topic']}")
+        mqtt.subscribe(data['topic'], data['qos'])
+    except Exception as e:
+        print(f"DEBUG ERROR: Failed to subscribe - {e}")
 
 
 @socketio.on('unsubscribe_all')
@@ -80,8 +81,14 @@ def handle_unsubscribe_all():
     mqtt.unsubscribe_all()
 
 
+msg_count = 0
 @mqtt.on_message()
 def handle_mqtt_message(client, userdata, message):
+    global msg_count
+    msg_count += 1
+    if msg_count % 1000 == 0 or msg_count == 1:
+        print(f"DEBUG: Received MQTT message #{msg_count} on {message.topic}")
+    
     data = dict(
         topic=message.topic,
         payload=message.payload.decode(),
@@ -95,8 +102,14 @@ def handle_logging(client, userdata, level, buf):
     # print(level, buf)
     pass
 
+@mqtt.on_connect()
+def handle_connect(client, userdata, flags, rc):
+    print(f"DEBUG: MQTT Connected to Broker! Return code: {rc}")
+    print(f"DEBUG: Hardcoding subscription to test/topic...")
+    mqtt.subscribe('test/topic', 0)
 
-
+# Initialize MQTT after registering event handlers
+mqtt.init_app(app)
 
 if __name__ == '__main__':
     socketio.run(app, host='127.0.0.1', port=5000, use_reloader=False, debug=False)
