@@ -25,11 +25,11 @@ app.config['MQTT_CLIENT_ID'] = 'flask_mqtt'
 app.config['MQTT_CLEAN_SESSION'] = True
 app.config['MQTT_USERNAME'] = ''
 app.config['MQTT_PASSWORD'] = ''
-app.config['MQTT_KEEPALIVE'] = 5
+app.config['MQTT_KEEPALIVE'] = 60
 app.config['MQTT_TLS_ENABLED'] = False
 app.config['MQTT_LAST_WILL_TOPIC'] = 'home/lastwill'
 app.config['MQTT_LAST_WILL_MESSAGE'] = 'bye'
-app.config['MQTT_LAST_WILL_QOS'] = 2
+app.config['MQTT_LAST_WILL_QOS'] = 0
 
 # Parameters for SSL enabled
 # app.config['MQTT_BROKER_PORT'] = 8883
@@ -96,9 +96,7 @@ def handle_logging(client, userdata, level, buf):
     pass
 
 
-# Initialize MQTT after registering event handlers
-mqtt.init_app(app)
 
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, use_reloader=False, debug=True)
+    socketio.run(app, host='127.0.0.1', port=5000, use_reloader=False, debug=False)
