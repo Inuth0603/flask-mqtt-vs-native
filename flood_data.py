@@ -4,6 +4,8 @@ import sys
 
 BROKER_ADDRESS = "localhost"
 TOPIC = "test/topic"
+TARGET_RATE = 5000  # msgs/sec
+INTERVAL = 1.0 / TARGET_RATE
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -23,15 +25,20 @@ except Exception as e:
 
 client.loop_start()
 
-print("Starting data flood... Press Ctrl+C to stop.")
+print(f"Starting data flood at target {TARGET_RATE} msg/sec... Press Ctrl+C to stop.")
+
 packet_num = 0
+next_time = time.perf_counter()
 try:
     while True:
         packet_num += 1
         payload = f"Data Packet #{packet_num} | Time: {time.time():.4f}"
         client.publish(TOPIC, payload, qos=0)
-        # Sleep a tiny amount so we don't completely lock up the CPU but still flood it fast
-        time.sleep(0.005) 
+        
+        next_time += INTERVAL
+        sleep_time = next_time - time.perf_counter()
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 except KeyboardInterrupt:
     print("\nStopping data flood.")
 finally:

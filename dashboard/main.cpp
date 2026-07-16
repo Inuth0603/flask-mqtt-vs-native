@@ -56,7 +56,7 @@ public:
 
     void on_success(const mqtt::token& tok) override {
         std::cout << "Connected successfully! Subscribing to " << TOPIC << std::endl;
-        cli_.subscribe(TOPIC, 1, nullptr, *this);
+        cli_.subscribe(TOPIC, 0, nullptr, *this);
         
         std::lock_guard<std::mutex> lock(state_mutex);
         latest_message = "Connected! Waiting for data...";
