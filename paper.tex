@@ -121,7 +121,7 @@ Averages recorded across $N=10$ trials (60s duration, 5,000 msg/sec load) are pr
 \hline
 \textbf{Router/Backend CPU (native = whole app)} & \textbf{49.6\% $\pm$ 1.5\%} & \textit{Backend Only: 53.9\%} & \textit{Backend Only: 53.9\%} & \textit{Backend Only: 24.7\%} \\
 \hline
-\textbf{UI Frame Rate} & \textbf{60 FPS (Vsync)} & \textbf{<10 FPS (Lag)} & \textbf{60 FPS (Vsync)} & \textbf{60 FPS (Vsync)} \\
+\textbf{UI Frame Rate} & \textbf{60 FPS (Vsync)} & \textbf{$<$10 FPS (Lag)} & \textbf{60 FPS (Vsync)} & \textbf{60 FPS (Vsync)} \\
 \hline
 \multicolumn{5}{p{450pt}}{*Note: The C++ Router/Backend CPU metric includes the entire application's software UI rendering, whereas the Web CPU metrics only capture the backend routing process, rendering them incomparable for holistic CPU efficiency. We report significance testing for the Native vs. Full-Stack Web total memory footprint comparison, confirmed via a Welch's t-test ($t(9.2) = 51.5, p < 0.001$).}
 \end{tabular}
@@ -154,7 +154,7 @@ While the formal 60-second trials show Flask backend memory reaching approximate
 
 When installed, \texttt{Flask-SocketIO} automatically defaults to the cooperative \texttt{eventlet} async worker. However, because standard library modules were left explicitly unpatched in our test environment, Paho MQTT's background listener executed within a standard blocking OS thread. As Paho rapidly handed off 5,000 messages per second to the \texttt{eventlet}-driven web queues, the unpatched blocking I/O starved the cooperative greenlets. Because the dispatcher was locked out, the underlying \texttt{python-engineio} queues ballooned infinitely, rapidly leaking memory until the process crashed. 
 
-\section{Threats to Validity and Alternative Architectures}
+\section{Threats to Validity and Alternative Web Frameworks}
 
 A potential threat to the validity of this study is the specific web architecture initially chosen (Flask-SocketIO to a DOM-heavy HTML client). To preempt this critique, we formally built and tested a highly optimized web dashboard utilizing HTML5 Canvas and \texttt{requestAnimationFrame}.
 
@@ -169,6 +169,9 @@ However, the fundamental architectural critique remains: deploying a full browse
 For dedicated factory monitoring workstations, developers frequently default to deploying Web-based dashboards wrapped in browser engines. This paper demonstrates a profound architectural trade-off in telemetry visualization under extreme Industry 4.0 workloads. When subjected to a true 5,000 msg/sec data flood, the Full-Stack Web architecture (Node.js + Canvas) demonstrated highly efficient backend routing.
 
 Crucially, the native C++ architecture completely avoids the massive browser memory tax, saving nearly 300 MB of physical RAM compared to the Node.js web stack. Therefore, the choice of architecture is a strict hardware trade-off: while web architectures offer rapid development and decouple routing from rendering, they introduce a permanent, multi-hundred-megabyte memory tax. Deployments constrained by strict RAM limits should favor unified native architectures to reclaim that critical memory headroom.
+
+\section*{Acknowledgments}
+This work was supported by independent research and the open-source community. The author would like to thank the developers of the \texttt{Flask-MQTT} library and the broader GTK and Node.js ecosystems for their invaluable tools and documentation.
 
 \begin{thebibliography}{1}
 \bibliographystyle{IEEEtran}
