@@ -17,14 +17,14 @@
     
     <script type="text/javascript" charset="utf-8">
         $(document).ready(function() {
-            var socket = io.connect('http://' + document.domain + ':' + location.port);
+            var socket = io.connect('http://' + location.hostname + ':' + location.port);
             
             // Decoupled state
             var latestMessage = "Waiting for data...";
             var hasNewMessage = true;
 
             socket.on('connect', function() {
-                var data = '{"topic": "test/topic", "qos": 0}';
+                var data = {topic: "test/topic", qos: 0};
                 socket.emit('subscribe', data);
             });
 
