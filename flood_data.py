@@ -28,6 +28,7 @@ client.loop_start()
 print(f"Starting data flood at target {TARGET_RATE} msg/sec... Press Ctrl+C to stop.")
 
 packet_num = 0
+start_time = time.time()
 next_time = time.perf_counter()
 try:
     while True:
@@ -42,5 +43,11 @@ try:
 except KeyboardInterrupt:
     print("\nStopping data flood.")
 finally:
+    elapsed_time = time.time() - start_time
+    actual_rate = packet_num / elapsed_time if elapsed_time > 0 else 0
+    print(f"--- Benchmark Results ---")
+    print(f"Total messages published: {packet_num}")
+    print(f"Total elapsed time: {elapsed_time:.2f} seconds")
+    print(f"Achieved rate: {actual_rate:.2f} msg/sec")
     client.loop_stop()
     client.disconnect()
