@@ -14,4 +14,6 @@ This repository contains all the source code, benchmark scripts, and implementat
 
 ## How to Run the Benchmarks
 
-See the methodology section in the paper for instructions on how to compile the C++ application using CMake and GTK4, run the `flood_data.py` publisher, and start the respective Node.js or Python backend servers.
+Before running the Python backend or publisher, install the exact dependencies with `pip install -r requirements.txt`. (These dependencies are strictly pinned to the versions used in the reported trials — this is critical, as Section 3.6 of the paper documents version-sensitive async-worker behavior and deadlocks).
+
+See the methodology section in the paper for further instructions on how to compile the C++ application using CMake and GTK4, run the `flood_data.py` publisher, and start the respective Node.js or Python backend servers.
