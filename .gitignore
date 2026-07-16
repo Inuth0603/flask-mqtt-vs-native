@@ -100,3 +100,10 @@ Pipfile.log
 # IDE configuration
 .idea/
 .vscode/
+
+# Ignore heavy build artifacts for paper release
+node_backend/node_modules/
+node_backend/package-lock.json
+dashboard/build/
+dashboard/.cache/
+example/venv/

@@ -58,6 +58,10 @@ bootstrap = Bootstrap(app)
 def index():
     return render_template('index.html')
 
+@app.route('/canvas')
+def canvas():
+    return render_template('canvas.html')
+
 
 @socketio.on('publish')
 def handle_publish(json_str):

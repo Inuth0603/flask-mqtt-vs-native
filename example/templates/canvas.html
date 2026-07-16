@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Optimized Canvas Dashboard</title>
+    <script type="text/javascript" src="//code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.4/socket.io.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #222; color: #fff; text-align: center; margin-top: 50px; }
+        canvas { background-color: #000; border: 2px solid #555; }
+        h1 { color: #00ff00; }
+    </style>
+</head>
+<body>
+    <h1>Optimized Web Interface (Canvas)</h1>
+    <canvas id="telemetryCanvas" width="600" height="400"></canvas>
+    
+    <script type="text/javascript" charset="utf-8">
+        $(document).ready(function() {
+            var socket = io.connect('http://' + document.domain + ':' + location.port);
+            
+            // Decoupled state
+            var latestMessage = "Waiting for data...";
+            var hasNewMessage = false;
+
+            socket.on('mqtt_message', function(data) {
+                latestMessage = data.payload;
+                hasNewMessage = true;
+            });
+
+            // Hardware-accelerated 60 FPS Canvas rendering loop
+            var canvas = document.getElementById('telemetryCanvas');
+            var ctx = canvas.getContext('2d');
+            
+            function renderLoop() {
+                if (hasNewMessage) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = "#00ff00";
+                    ctx.font = "24px monospace";
+                    ctx.textAlign = "center";
+                    ctx.fillText(latestMessage, canvas.width / 2, canvas.height / 2);
+                    hasNewMessage = false;
+                }
+                requestAnimationFrame(renderLoop);
+            }
+            
+            requestAnimationFrame(renderLoop);
+        });
+    </script>
+</body>
+</html>
