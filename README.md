@@ -1,7 +1,13 @@
-# Native C++ vs Full-Stack Web Telemetry Benchmark
+# High-Performance Telemetry Visualization: Native C++ Architectures vs. Standard Web-Stack Baselines in Factory Workstations
 
-This repository contains all the source code, benchmark scripts, and implementation architectures discussed in the paper:
-**"High-Performance Telemetry Visualization: Native C++ Architectures vs. Standard Web-Stack Baselines in Factory Workstations"**.
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21397909.svg)](https://doi.org/10.5281/zenodo.21397909)
+
+> **Official Preprint:** The formal architectural breakdown, benchmarking methodology, and $N=10$ trial results for this repository are published on Zenodo. 
+> 📄 **[Read the full paper here (PDF)](https://doi.org/10.5281/zenodo.21397909)**
+
+---
+
+This repository contains all the source code, benchmark scripts, and implementation architectures discussed in the paper.
 
 ## Repository Structure
 
