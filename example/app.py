@@ -67,13 +67,8 @@ def handle_publish(json_str):
 
 @socketio.on('subscribe')
 def handle_subscribe(json_str):
-    print(f"DEBUG: socketio subscribe event fired! Data received: {json_str}")
-    try:
-        data = json.loads(json_str)
-        print(f"DEBUG: Parsed JSON correctly, subscribing to MQTT topic: {data['topic']}")
-        mqtt.subscribe(data['topic'], data['qos'])
-    except Exception as e:
-        print(f"DEBUG ERROR: Failed to subscribe - {e}")
+    # Subscription is already handled on connect
+    pass
 
 
 @socketio.on('unsubscribe_all')
@@ -81,14 +76,8 @@ def handle_unsubscribe_all():
     mqtt.unsubscribe_all()
 
 
-msg_count = 0
 @mqtt.on_message()
 def handle_mqtt_message(client, userdata, message):
-    global msg_count
-    msg_count += 1
-    if msg_count % 1000 == 0 or msg_count == 1:
-        print(f"DEBUG: Received MQTT message #{msg_count} on {message.topic}")
-    
     data = dict(
         topic=message.topic,
         payload=message.payload.decode(),
@@ -104,8 +93,6 @@ def handle_logging(client, userdata, level, buf):
 
 @mqtt.on_connect()
 def handle_connect(client, userdata, flags, rc):
-    print(f"DEBUG: MQTT Connected to Broker! Return code: {rc}")
-    print(f"DEBUG: Hardcoding subscription to test/topic...")
     mqtt.subscribe('test/topic', 0)
 
 # Initialize MQTT after registering event handlers
