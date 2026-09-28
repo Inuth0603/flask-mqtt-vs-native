@@ -9,11 +9,13 @@
         body { font-family: sans-serif; background-color: #222; color: #fff; text-align: center; margin-top: 50px; }
         canvas { background-color: #000; border: 2px solid #555; }
         h1 { color: #00ff00; }
+        #stats { font-family: monospace; color: #888; margin-top: 16px; font-size: 14px; }
     </style>
 </head>
 <body>
     <h1>Optimized Web Interface (Canvas)</h1>
     <canvas id="telemetryCanvas" width="600" height="400"></canvas>
+    <div id="stats">FPS: -- | Messages: 0</div>
     
     <script type="text/javascript" charset="utf-8">
         $(document).ready(function() {
@@ -23,6 +25,9 @@
             var latestMessage = "Waiting for data...";
             var hasNewMessage = true;
 
+            // --- Concern 1: frontend message counter ---
+            var frontendMsgCount = 0;
+
             socket.on('connect', function() {
                 var data = {topic: "test/topic", qos: 0};
                 socket.emit('subscribe', data);
@@ -31,25 +36,54 @@
             socket.on('mqtt_message', function(data) {
                 latestMessage = data.payload;
                 hasNewMessage = true;
+                frontendMsgCount++;
             });
+
+            // --- Concern 5: FPS measurement via rAF timestamps ---
+            var frameCount = 0;
+            var lastFpsTime = 0;
+            var currentFps = 0;
+            var statsDiv = document.getElementById('stats');
 
             // Hardware-accelerated 60 FPS Canvas rendering loop
             var canvas = document.getElementById('telemetryCanvas');
             var ctx = canvas.getContext('2d');
             
-            function renderLoop() {
+            function renderLoop(timestamp) {
+                // FPS calculation
+                frameCount++;
+                if (lastFpsTime === 0) lastFpsTime = timestamp;
+                var elapsed = timestamp - lastFpsTime;
+                if (elapsed >= 1000) {
+                    currentFps = (frameCount / (elapsed / 1000)).toFixed(1);
+                    statsDiv.textContent = 'FPS: ' + currentFps + ' | Messages received: ' + frontendMsgCount;
+                    frameCount = 0;
+                    lastFpsTime = timestamp;
+                }
+
                 if (hasNewMessage) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.fillStyle = "#00ff00";
                     ctx.font = "24px monospace";
                     ctx.textAlign = "center";
-                    ctx.fillText(latestMessage, canvas.width / 2, canvas.height / 2);
+
+                    // Strip the timestamp prefix for display
+                    var displayMsg = latestMessage;
+                    var sep = latestMessage.indexOf('|');
+                    if (sep !== -1) displayMsg = latestMessage.substring(sep + 1);
+
+                    ctx.fillText(displayMsg, canvas.width / 2, canvas.height / 2);
                     hasNewMessage = false;
                 }
                 requestAnimationFrame(renderLoop);
             }
             
             requestAnimationFrame(renderLoop);
+
+            // Log stats to console on page unload
+            window.addEventListener('beforeunload', function() {
+                console.log('[Stats] Frontend messages received: ' + frontendMsgCount + ', Last FPS: ' + currentFps);
+            });
         });
     </script>
 </body>
