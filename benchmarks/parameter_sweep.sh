@@ -72,6 +72,7 @@ start_backend() {
 
 stop_backend() {
     if [ -n "${BACKEND_PID:-}" ]; then
+        killall -9 dashboard 2>/dev/null || true
         kill -INT "$BACKEND_PID" 2>/dev/null || true
         wait "$BACKEND_PID" 2>/dev/null || true
     fi
