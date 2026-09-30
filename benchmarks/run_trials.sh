@@ -27,6 +27,16 @@ ARCHITECTURES=("native" "node" "flask_canvas" "flask_dom")
 mkdir -p "$BASE_LOG_DIR"
 
 # ---------------------------------------------------------------------------
+# Kill any lingering processes from previous runs
+# ---------------------------------------------------------------------------
+echo "Cleaning up stale processes from previous runs..."
+pkill -9 -f "dashboard/build/dashboard" 2>/dev/null || true
+pkill -9 -f "python3 app.py" 2>/dev/null || true
+pkill -9 -f "node server.js" 2>/dev/null || true
+pkill -f "chrome.*user-data-dir=/tmp" 2>/dev/null || true
+sleep 2  # let ports free up
+
+# ---------------------------------------------------------------------------
 # Log system environment (once)
 # ---------------------------------------------------------------------------
 ENV_FILE="$BASE_LOG_DIR/environment.txt"
@@ -209,7 +219,11 @@ for entry in "${TRIAL_ORDER[@]}"; do
 
     # Stop everything
     if [ -n "$BACKEND_PID" ]; then
-        killall -9 dashboard 2>/dev/null || true
+        # Kill by full command-line match (killall matches process name only and
+        # silently fails when the binary is invoked via a path like ./dashboard/build/dashboard)
+        pkill -9 -f "dashboard/build/dashboard" 2>/dev/null || true
+        pkill -9 -f "python3 app.py" 2>/dev/null || true
+        pkill -9 -f "node server.js" 2>/dev/null || true
         kill -INT "$BACKEND_PID" 2>/dev/null || true
         wait "$BACKEND_PID" 2>/dev/null || true
     fi
