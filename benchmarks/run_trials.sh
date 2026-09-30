@@ -98,7 +98,7 @@ launch_chrome() {
         --disable-renderer-backgrounding \
         --disable-background-timer-throttling \
         --disable-backgrounding-occluded-windows \
-        --app="$url" &
+        --app="$url" > /dev/null 2>&1 &
     CHROME_PID=$!
     echo "$CHROME_PID" > "$profile_dir/chrome.pid"
 }
