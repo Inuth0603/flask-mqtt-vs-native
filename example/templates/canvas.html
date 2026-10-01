@@ -24,9 +24,21 @@
             // Decoupled state
             var latestMessage = "Waiting for data...";
             var hasNewMessage = true;
+            var latestPubMonoNs = null;  // publisher's monotonic timestamp
 
             // --- Concern 1: frontend message counter ---
             var frontendMsgCount = 0;
+
+            // --- Concern 4: publish-to-DISPLAY latency ---
+            // On Linux, performance.now() uses CLOCK_MONOTONIC, so on the
+            // same host it is directly comparable to Python's
+            // time.monotonic_ns().  Latency is computed at RENDER TIME (in
+            // requestAnimationFrame), not on message arrival.
+            var displayLatencySamples = [];  // microseconds
+
+            // --- Concern 5: frame-time distribution ---
+            var frameTimeSamples = [];       // inter-frame intervals in ms
+            var prevFrameTimestamp = 0;
 
             socket.on('connect', function() {
                 var data = {topic: "test/topic", qos: 0};
@@ -37,6 +49,16 @@
                 latestMessage = data.payload;
                 hasNewMessage = true;
                 frontendMsgCount++;
+
+                // Parse the embedded monotonic timestamp for display latency
+                var sep = data.payload.indexOf('|');
+                if (sep !== -1) {
+                    try {
+                        latestPubMonoNs = BigInt(data.payload.substring(0, sep));
+                    } catch(e) {
+                        latestPubMonoNs = null;
+                    }
+                }
             });
 
             // --- Concern 5: FPS measurement via rAF timestamps ---
@@ -50,6 +72,13 @@
             var ctx = canvas.getContext('2d');
             
             function renderLoop(timestamp) {
+                // Frame-time distribution (Concern 5)
+                if (prevFrameTimestamp > 0) {
+                    var intervalMs = timestamp - prevFrameTimestamp;
+                    frameTimeSamples.push(intervalMs);
+                }
+                prevFrameTimestamp = timestamp;
+
                 // FPS calculation
                 frameCount++;
                 if (lastFpsTime === 0) lastFpsTime = timestamp;
@@ -74,16 +103,65 @@
 
                     ctx.fillText(displayMsg, canvas.width / 2, canvas.height / 2);
                     hasNewMessage = false;
+
+                    // --- Concern 4: compute publish-to-DISPLAY latency ---
+                    // Measured HERE at render time, not on message arrival.
+                    // performance.timeOrigin + performance.now() gives ms since
+                    // CLOCK_MONOTONIC epoch on Linux.
+                    if (latestPubMonoNs !== null) {
+                        var nowNs = BigInt(Math.round((performance.timeOrigin + performance.now()) * 1e6));
+                        if (nowNs >= latestPubMonoNs) {
+                            var latUs = Number(nowNs - latestPubMonoNs) / 1000.0;
+                            displayLatencySamples.push(latUs);
+                        }
+                    }
                 }
                 requestAnimationFrame(renderLoop);
             }
             
             requestAnimationFrame(renderLoop);
 
-            // Log stats to console on page unload
-            window.addEventListener('beforeunload', function() {
-                console.log('[Stats] Frontend messages received: ' + frontendMsgCount + ', Last FPS: ' + currentFps);
-            });
+            // --- Report stats back to backend on page unload ---
+            function reportStats() {
+                var stats = {
+                    frontend_messages_received: frontendMsgCount,
+                    last_fps: parseFloat(currentFps) || 0,
+                    frame_time_samples_count: frameTimeSamples.length,
+                    display_latency_samples_count: displayLatencySamples.length
+                };
+
+                // Compute frame-time stats
+                if (frameTimeSamples.length > 0) {
+                    var sorted = frameTimeSamples.slice().sort(function(a,b){return a-b;});
+                    var n = sorted.length;
+                    stats.frame_time_mean_ms = sorted.reduce(function(a,b){return a+b;},0) / n;
+                    stats.frame_time_median_ms = sorted[Math.floor(n/2)];
+                    stats.frame_time_p99_ms = sorted[Math.floor(n*0.99)];
+                    stats.frame_time_max_ms = sorted[n-1];
+                    stats.dropped_frames = sorted.filter(function(v){return v > 33.3;}).length;
+                }
+
+                // Compute display latency stats
+                if (displayLatencySamples.length > 0) {
+                    var sorted = displayLatencySamples.slice().sort(function(a,b){return a-b;});
+                    var n = sorted.length;
+                    stats.display_latency_median_us = sorted[Math.floor(n/2)];
+                    stats.display_latency_p95_us = sorted[Math.floor(n*0.95)];
+                    stats.display_latency_p99_us = sorted[Math.floor(n*0.99)];
+                    stats.display_latency_mean_us = sorted.reduce(function(a,b){return a+b;},0) / n;
+                }
+
+                // Send to backend for logging
+                socket.emit('benchmark_stats', JSON.stringify(stats));
+                console.log('[Benchmark Stats]', JSON.stringify(stats, null, 2));
+            }
+
+            window.addEventListener('beforeunload', reportStats);
+
+            // Also report periodically in case beforeunload doesn't fire
+            setInterval(function() {
+                if (frontendMsgCount > 0) reportStats();
+            }, 30000);
         });
     </script>
 </body>

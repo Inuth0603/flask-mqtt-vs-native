@@ -54,7 +54,7 @@ mqttClient.on('message', (topic, message) => {
   const payload = message.toString();
   msgCount++;
 
-  // --- Concern 4: latency measurement ---
+  // --- Concern 4: routing-layer latency measurement ---
   const lat = computeLatencyUs(payload);
   if (lat >= 0) latencySamples.push(lat);
 
@@ -62,6 +62,29 @@ mqttClient.on('message', (topic, message) => {
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(payload);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Browser-side benchmark stats receiver  (Concerns 4 & 5)
+// ---------------------------------------------------------------------------
+let browserStats = null;
+
+wss.on('connection', (ws) => {
+  ws.on('message', (data) => {
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === 'benchmark_stats') {
+        browserStats = msg;
+        const logDir = process.env.BENCHMARK_LOG_DIR || 'benchmark_logs';
+        fs.mkdirSync(logDir, { recursive: true });
+        const statsPath = path.join(logDir, 'browser_stats.json');
+        fs.writeFileSync(statsPath, JSON.stringify(msg, null, 2));
+        console.log(`[benchmark] Browser stats written to ${statsPath}`);
+      }
+    } catch (e) {
+      // Not a JSON stats message — ignore (could be a regular text payload)
     }
   });
 });
@@ -98,14 +121,28 @@ function dumpStats() {
 
     // Write summary
     const summaryPath = path.join(logDir, 'node_summary.log');
-    const summary = [
+    const summaryLines = [
       `messages_received=${msgCount}`,
-      `latency_median_us=${median.toFixed(2)}`,
-      `latency_p95_us=${p95.toFixed(2)}`,
-      `latency_p99_us=${p99.toFixed(2)}`,
-      ''
-    ].join('\n');
-    fs.writeFileSync(summaryPath, summary);
+      `routing_latency_median_us=${median.toFixed(2)}`,
+      `routing_latency_p95_us=${p95.toFixed(2)}`,
+      `routing_latency_p99_us=${p99.toFixed(2)}`,
+    ];
+
+    // Include browser-reported display latency if available
+    if (browserStats && browserStats.display_latency_median_us) {
+      summaryLines.push(`display_latency_median_us=${browserStats.display_latency_median_us.toFixed(2)}`);
+      summaryLines.push(`display_latency_p95_us=${browserStats.display_latency_p95_us.toFixed(2)}`);
+      summaryLines.push(`display_latency_p99_us=${browserStats.display_latency_p99_us.toFixed(2)}`);
+      summaryLines.push(`frontend_messages_received=${browserStats.frontend_messages_received}`);
+      summaryLines.push(`browser_fps=${browserStats.last_fps}`);
+      if (browserStats.frame_time_mean_ms) {
+        summaryLines.push(`frame_time_mean_ms=${browserStats.frame_time_mean_ms.toFixed(3)}`);
+        summaryLines.push(`frame_time_max_ms=${browserStats.frame_time_max_ms.toFixed(3)}`);
+        summaryLines.push(`dropped_frames=${browserStats.dropped_frames}`);
+      }
+    }
+    summaryLines.push('');
+    fs.writeFileSync(summaryPath, summaryLines.join('\n'));
   }
 }
 
