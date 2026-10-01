@@ -55,13 +55,21 @@ mqttClient.on('message', (topic, message) => {
   msgCount++;
 
   // --- Concern 4: routing-layer latency measurement ---
-  const lat = computeLatencyUs(payload);
-  if (lat >= 0) latencySamples.push(lat);
+  const latUs = computeLatencyUs(payload);
+  let newPayload = payload;
+  if (latUs >= 0) {
+    latencySamples.push(latUs);
+    const nowWallMs = Date.now();
+    const sep = payload.indexOf('|');
+    if (sep !== -1) {
+      newPayload = nowWallMs + "|" + latUs.toFixed(2) + "|" + payload.substring(sep + 1);
+    }
+  }
 
   // We use standard 'ws' which is significantly faster than Socket.IO
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
+      client.send(newPayload);
     }
   });
 });
