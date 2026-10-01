@@ -22,7 +22,7 @@ DURATION="${2:-60}"
 RATE=5000
 BASE_LOG_DIR="benchmark_logs/formal_trials"
 
-ARCHITECTURES=("native" "node" "flask_canvas" "flask_dom")
+ARCHITECTURES=("flask_canvas" "flask_dom")  # TEMP: only re-run missing architectures
 
 mkdir -p "$BASE_LOG_DIR"
 
