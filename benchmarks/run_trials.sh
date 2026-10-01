@@ -217,15 +217,25 @@ for entry in "${TRIAL_ORDER[@]}"; do
     # Broker stats AFTER
     get_broker_stats "after" "$TRIAL_DIR/broker_stats.log"
 
-    # Stop everything
+    # Stop everything — GRACEFUL shutdown so dump_stats() can run
     if [ -n "$BACKEND_PID" ]; then
-        # Kill by full command-line match (killall matches process name only and
-        # silently fails when the binary is invoked via a path like ./dashboard/build/dashboard)
-        pkill -9 -f "dashboard/build/dashboard" 2>/dev/null || true
-        pkill -9 -f "python3 app.py" 2>/dev/null || true
-        pkill -9 -f "node server.js" 2>/dev/null || true
+        # Send SIGINT first to trigger graceful stats dump
         kill -INT "$BACKEND_PID" 2>/dev/null || true
+        # Wait up to 5 seconds for graceful shutdown
+        for _wait in $(seq 1 50); do
+            kill -0 "$BACKEND_PID" 2>/dev/null || break
+            sleep 0.1
+        done
+        # Force-kill only if still alive
+        if kill -0 "$BACKEND_PID" 2>/dev/null; then
+            echo "  ⚠ Backend did not exit gracefully, force-killing..."
+            kill -9 "$BACKEND_PID" 2>/dev/null || true
+        fi
         wait "$BACKEND_PID" 2>/dev/null || true
+        # Clean up any orphan processes
+        pkill -f "dashboard/build/dashboard" 2>/dev/null || true
+        pkill -f "python3 app.py" 2>/dev/null || true
+        pkill -f "node server.js" 2>/dev/null || true
     fi
     if [ -n "$CHROME_PROFILE" ]; then
         kill_chrome "$CHROME_PROFILE"

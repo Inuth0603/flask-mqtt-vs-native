@@ -63,17 +63,17 @@ static std::string log_dir() {
 }
 
 // ---------------------------------------------------------------------------
-// Parse the dual-timestamp payload from revised flood_data.py
+// Parse the monotonic timestamp from revised flood_data.py
 //
-// Format: "<monotonic_ns>:<wallclock_ns>|Data Packet #<n>..."
+// Format: "<monotonic_ns>|Data Packet #<n>..."
 //
 // Returns the monotonic_ns value (for CLOCK_MONOTONIC comparison).
 // ---------------------------------------------------------------------------
 static uint64_t parse_mono_ns(const std::string& payload) {
-    auto colon = payload.find(':');
-    if (colon == std::string::npos) return 0;
+    auto sep = payload.find('|');
+    if (sep == std::string::npos) return 0;
     try {
-        return std::stoull(payload.substr(0, colon));
+        return std::stoull(payload.substr(0, sep));
     } catch (...) {
         return 0;
     }

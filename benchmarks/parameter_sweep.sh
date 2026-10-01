@@ -72,9 +72,23 @@ start_backend() {
 
 stop_backend() {
     if [ -n "${BACKEND_PID:-}" ]; then
-        killall -9 dashboard 2>/dev/null || true
+        # Send SIGINT first to trigger graceful stats dump
         kill -INT "$BACKEND_PID" 2>/dev/null || true
+        # Wait up to 5 seconds for graceful shutdown
+        for _wait in $(seq 1 50); do
+            kill -0 "$BACKEND_PID" 2>/dev/null || break
+            sleep 0.1
+        done
+        # Force-kill only if still alive
+        if kill -0 "$BACKEND_PID" 2>/dev/null; then
+            echo "  ⚠ Backend did not exit gracefully, force-killing..."
+            kill -9 "$BACKEND_PID" 2>/dev/null || true
+        fi
         wait "$BACKEND_PID" 2>/dev/null || true
+        # Clean up any orphan processes
+        pkill -f "dashboard/build/dashboard" 2>/dev/null || true
+        pkill -f "python.*app.py" 2>/dev/null || true
+        pkill -f "node server.js" 2>/dev/null || true
     fi
 }
 

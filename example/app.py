@@ -113,12 +113,55 @@ def dump_stats():
         summary_path = os.path.join(log_dir, "flask_summary.log")
         with open(summary_path, "w") as f:
             f.write(f"messages_received={msg_count}\n")
-            f.write(f"latency_median_us={median:.2f}\n")
-            f.write(f"latency_p95_us={p95:.2f}\n")
-            f.write(f"latency_p99_us={p99:.2f}\n")
+            f.write(f"routing_latency_median_us={median:.2f}\n")
+            f.write(f"routing_latency_p95_us={p95:.2f}\n")
+            f.write(f"routing_latency_p99_us={p99:.2f}\n")
+            # Include browser-reported display latency if available
+            if browser_stats:
+                for key in ["display_latency_median_us", "display_latency_p95_us",
+                             "display_latency_p99_us", "frontend_messages_received",
+                             "last_fps"]:
+                    if key in browser_stats:
+                        f.write(f"{key}={browser_stats[key]}\n")
+                if "frame_time_mean_ms" in browser_stats:
+                    f.write(f"frame_time_mean_ms={browser_stats['frame_time_mean_ms']:.3f}\n")
+                    f.write(f"frame_time_max_ms={browser_stats['frame_time_max_ms']:.3f}\n")
+                    f.write(f"dropped_frames={browser_stats['dropped_frames']}\n")
 
 
 atexit.register(dump_stats)
+
+# Handle SIGINT gracefully so atexit/dump_stats actually runs
+def _sigint_handler(sig, frame):
+    dump_stats()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, _sigint_handler)
+signal.signal(signal.SIGTERM, _sigint_handler)
+
+
+# ---------------------------------------------------------------------------
+# Browser-side benchmark stats receiver  (Concerns 4 & 5)
+# ---------------------------------------------------------------------------
+browser_stats = None
+
+@socketio.on('benchmark_stats')
+def handle_benchmark_stats(json_str):
+    global browser_stats
+    try:
+        stats = json.loads(json_str)
+        browser_stats = stats
+
+        log_dir = os.environ.get("BENCHMARK_LOG_DIR", "benchmark_logs")
+        os.makedirs(log_dir, exist_ok=True)
+
+        stats_path = os.path.join(log_dir, "browser_stats.json")
+        with open(stats_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"[benchmark] Browser stats written to {stats_path}")
+    except Exception as e:
+        print(f"[benchmark] Error handling browser stats: {e}")
+
 
 
 @app.route('/')
