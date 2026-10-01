@@ -43,7 +43,7 @@ get_pids() {
             pgrep -f "chromium-browser"         2>/dev/null || \
             pgrep -f "google-chrome"            2>/dev/null || true
             ;;
-        flask)
+        flask|flask_canvas|flask_dom)
             # Python backend
             pgrep -f "python.*app.py" || true
             # All Chromium processes for localhost:5000

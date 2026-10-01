@@ -39,7 +39,7 @@ get_pids() {
             pgrep -f "chromium" 2>/dev/null || \
             pgrep -f "google-chrome" 2>/dev/null || true
             ;;
-        flask)
+        flask|flask_canvas|flask_dom)
             pgrep -f "python.*app.py" || true
             pgrep -f "chromium" 2>/dev/null || \
             pgrep -f "google-chrome" 2>/dev/null || true
