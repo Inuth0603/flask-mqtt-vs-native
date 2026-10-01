@@ -37,16 +37,6 @@
             latestMessage = event.data;
             hasNewMessage = true;
             frontendMsgCount++;
-
-            // Parse embedded monotonic timestamp
-            var sep = event.data.indexOf('|');
-            if (sep !== -1) {
-                try {
-                    latestPubMonoNs = BigInt(event.data.substring(0, sep));
-                } catch(e) {
-                    latestPubMonoNs = null;
-                }
-            }
         };
 
         // --- Concern 5: FPS measurement via rAF timestamps ---
@@ -84,22 +74,22 @@
                 ctx.font = "24px monospace";
                 ctx.textAlign = "center";
 
-                // Strip the timestamp prefix for display
                 var displayMsg = latestMessage;
-                var sep = latestMessage.indexOf('|');
-                if (sep !== -1) displayMsg = latestMessage.substring(sep + 1);
+                var parts = latestMessage.split('|');
+                if (parts.length >= 3 && !isNaN(parseFloat(parts[0]))) {
+                    var backendWallMs = parseFloat(parts[0]);
+                    var routingLatUs = parseFloat(parts[1]);
+                    displayMsg = parts.slice(2).join('|');
+
+                    var nowWallMs = performance.timeOrigin + performance.now();
+                    var displayLatUs = routingLatUs + (nowWallMs - backendWallMs) * 1000.0;
+                    displayLatencySamples.push(displayLatUs);
+                } else if (parts.length >= 2) {
+                    displayMsg = parts.slice(1).join('|');
+                }
 
                 ctx.fillText(displayMsg, canvas.width / 2, canvas.height / 2);
                 hasNewMessage = false;
-
-                // --- Concern 4: compute publish-to-DISPLAY latency ---
-                if (latestPubMonoNs !== null) {
-                    var nowNs = BigInt(Math.round((performance.timeOrigin + performance.now()) * 1e6));
-                    if (nowNs >= latestPubMonoNs) {
-                        var latUs = Number(nowNs - latestPubMonoNs) / 1000.0;
-                        displayLatencySamples.push(latUs);
-                    }
-                }
             }
             requestAnimationFrame(renderLoop);
         }

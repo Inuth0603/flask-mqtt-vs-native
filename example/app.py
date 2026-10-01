@@ -203,6 +203,11 @@ def handle_mqtt_message(client, userdata, message):
     lat = compute_latency_us(payload_str)
     if lat >= 0:
         latency_samples_us.append(lat)
+        
+        now_wall_ms = time.time() * 1000
+        sep = payload_str.find('|')
+        if sep != -1:
+            payload_str = f"{now_wall_ms}|{lat:.2f}|{payload_str[sep+1:]}"
 
     data = dict(
         topic=message.topic,
