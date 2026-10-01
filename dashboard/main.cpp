@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <numeric>
 #include <ctime>
+#include <csignal>
 
 const std::string SERVER_ADDRESS { "tcp://localhost:1883" };
 const std::string CLIENT_ID { "gtk4_dashboard_client" };
@@ -359,6 +360,12 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 }
 
 int main(int argc, char **argv) {
+    std::signal(SIGINT, [](int) {
+        std::cout << "\n[Native] Caught SIGINT, dumping stats and exiting..." << std::endl;
+        dump_stats();
+        std::exit(0);
+    });
+
     srand(static_cast<unsigned>(time(nullptr)));
     std::string unique_client_id = CLIENT_ID + "_" + std::to_string(rand());
     mqtt::async_client client(SERVER_ADDRESS, unique_client_id);
