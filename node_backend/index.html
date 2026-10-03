@@ -49,7 +49,19 @@
         var ctx = canvas.getContext('2d');
         var statsDiv = document.getElementById('stats');
         
+        var urlParams = new URLSearchParams(window.location.search);
+        var targetFps = parseInt(urlParams.get('fps')) || 144; // Default to unlocked Wayland vsync
+        var minFrameTimeMs = targetFps === 144 ? 0 : (1000 / targetFps);
+        var lastRenderTime = 0;
+
         function renderLoop(timestamp) {
+            // Check if we need to throttle to 30 or 60 Hz
+            if (minFrameTimeMs > 0 && (timestamp - lastRenderTime) < minFrameTimeMs) {
+                requestAnimationFrame(renderLoop);
+                return;
+            }
+            lastRenderTime = timestamp;
+
             // Frame-time distribution (Concern 5)
             if (prevFrameTimestamp > 0) {
                 var intervalMs = timestamp - prevFrameTimestamp;

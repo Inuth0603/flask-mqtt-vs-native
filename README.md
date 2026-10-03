@@ -23,3 +23,11 @@ This repository contains all the source code, benchmark scripts, and implementat
 Before running the Python backend or publisher, install the exact dependencies with `pip install -r requirements.txt`. (These dependencies are strictly pinned to the versions used in the reported trials — this is critical, as Section 3.6 of the paper documents version-sensitive async-worker behavior and deadlocks).
 
 See the methodology section in the paper for further instructions on how to compile the C++ application using CMake and GTK4, run the `flood_data.py` publisher, and start the respective Node.js or Python backend servers.
+
+## Hardware Environment (v3 Dataset)
+
+All trials for the finalized v3 dataset were executed on the following native testbed to ensure accurate rendering performance and latency capture:
+* **CPU:** 12th Gen Intel Core i5-12450H (8 physical cores / 12 siblings)
+* **RAM:** 14 GiB accessible
+* **OS/Display:** Ubuntu running natively on a Wayland display server (144Hz)
+* *(Note: Older deprecated v1/v2 logs ran on an un-accelerated Windows WSL2 environment and have been archived in `deprecated_archives/`)*

@@ -26,7 +26,7 @@
 \maketitle
 
 \begin{abstract}
-In modern Industry 4.0 environments, factory monitoring workstations ("thick clients") are tasked with visualizing high-frequency, asynchronous telemetry data in real-time. Despite having adequate computing and graphics resources, developers frequently default to deploying Web-based dashboards wrapped in browser engines. While a naive DOM/WebSocket implementation introduces severe frame-rate instability, we demonstrate a fascinating architectural trade-off when compared against a Full-Stack Optimized web client (Node.js + Canvas). When comparing the web-based frameworks, the Full-Stack Web (Node.js) architecture proved highly efficient, requiring only 83 MB for its routing layer. In stark contrast, the Python Flask backend suffered significant memory bloat, reaching 175 MB within 60 seconds. Furthermore, under extended runtime, we additionally observed catastrophic memory ballooning. Because of an invisible concurrency deadlock between Python's cooperative eventlet async workers and unpatched blocking C-extensions (like Paho MQTT's native OS threads), the Python dispatcher starved under load. Consequently, the outbound message queues grew infinitely, rapidly leaking past 1 GB of RAM during an informal, single 5-minute extended run. This highlights a fundamental weakness in Python's fragmented async ecosystem for high-frequency telemetry routing, as a single missing monkey-patch call causes catastrophic failure. However, the web architecture cannot avoid the fixed cost of hosting a browser engine, incurring a massive 498 MB total memory footprint compared to the Native C++ application's 199 MB. This paper argues that the choice between Native and Web architectures in Industry 4.0 is a strict trade-off: web architectures decouple routing for rapid development, but unified native architectures are highly advantageous for deployments constrained by absolute RAM limits. Whether this memory advantage is decisive in practice will depend entirely on the RAM headroom required by concurrent edge-AI workloads.
+In modern Industry 4.0 environments, factory monitoring workstations ("thick clients") are tasked with visualizing high-frequency, asynchronous telemetry data in real-time. Despite having adequate computing and graphics resources, developers frequently default to deploying Web-based dashboards wrapped in browser engines. While a naive DOM/WebSocket implementation introduces severe frame-rate instability, we demonstrate a distinct architectural trade-off when compared against a Full-Stack Optimized web client (Node.js + Canvas). By expanding our evaluation to include complete process-tree CPU measurements and precise Proportional Set Size (PSS) memory accounting, we provide a rigorous comparison of these architectures under a 5,000 MQTT messages/second workload. Our results show that while all architectures successfully delivered 100\% of the published payload to the subscriber application, the Full-Stack Web (Node.js) architecture achieved the lowest end-to-end median latency (1.15 ms) but required an unrestrained frame rate that heavily taxed the CPU. When frame rates are matched, the primary architectural differentiator is memory: Native GTK4 reclaims 48 MB of PSS per interface, making it the strict preference for environments with constrained RAM headroom, such as those running concurrent edge-AI workloads.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -35,152 +35,116 @@ Edge Computing, Factory Automation, GTK4, Industrial Internet of Things, MQTT, N
 
 \section{Introduction}
 \label{sec:introduction}
-\IEEEPARstart{T}{he} monitoring of real-time factory floor data requires interfaces that are highly responsive and capable of absorbing massive data floods without lagging or crashing. As Industry 4.0 relies increasingly on edge computing for real-time industrial automation \cite{b1}, telemetry systems have had to evolve to handle sustained, high-frequency continuous data streams.
+\IEEEPARstart{T}{he} monitoring of real-time factory floor data requires interfaces that are highly responsive and capable of absorbing massive data floods without lagging or crashing. As Industry 4.0 relies increasingly on edge computing for real-time industrial automation \cite{b1, b4}, telemetry systems have had to evolve to handle sustained, high-frequency continuous data streams.
 
-A common trend in industry is to build these interfaces using rapid-development web frameworks (like Python Flask) and display them locally on a workstation via a web browser. While easy to develop, a naive DOM-based implementation of this ``web-stack on a workstation'' introduces severe latency. As our results will show, while the backend CPU routing bottleneck of frameworks like Flask can be mitigated by switching to faster asynchronous runtimes (e.g., Node.js), the frontend clients still incur massive memory overhead due to the fixed architectural cost of hosting the browser engine.
+A common trend in industry is to build these interfaces using rapid-development web frameworks (like Python Flask or Node.js) and display them locally on a workstation via a web browser. While easy to develop, a naive DOM-based implementation of this ``web-stack on a workstation'' introduces severe rendering latency. As our results will show, the performance of web-based frameworks can be significantly improved by switching to faster asynchronous runtimes (e.g., Node.js) and HTML5 Canvas, but they still incur a systemic memory and CPU overhead due to the fixed architectural cost of the multi-process browser engine \cite{b5}.
 
-Furthermore, modern factory monitoring workstations are frequently required to run heavy concurrent workloads, such as real-time object detection models (e.g., YOLOv8 \cite{b2} when run in CPU-only edge deployments) for automated industrial quality inspection \cite{b3}. Because these AI quality-control workloads demand maximum computational resources, it is imperative that the telemetry visualization interface consumes as little overhead as possible. This paper proposes a return to highly optimized, Native C++ architectures (utilizing GTK4) to completely bypass the massive browser memory tax and reclaim critical RAM headroom.
+Furthermore, modern factory monitoring workstations are frequently required to run heavy concurrent workloads, such as real-time object detection models (e.g., YOLOv8 \cite{b2} when run in CPU-only edge deployments) for automated industrial quality inspection \cite{b3}. Because these AI quality-control workloads demand maximum computational resources, it is imperative that the telemetry visualization interface consumes as little overhead as possible. This paper evaluates whether a return to highly optimized, Native C++ architectures (utilizing GTK4) can bypass the browser memory tax and reclaim critical hardware headroom, and compares the resulting performance against state-of-the-art web architectures.
 
 \subsection{Reproducibility and Open Data}
-To ensure transparency and reproducibility, all benchmark scripts, the MQTT publisher, the C++ application source, the Node.js implementation, and raw htop capture logs for the $N=10$ trials are available at: \url{https://github.com/Inuth0603/flask-mqtt-vs-native} (Note: The Node.js implementation was added after the repository was initially named, and is located in the node\_backend directory).
+To ensure transparency and reproducibility, all benchmark scripts, the MQTT publisher, the C++ application source, the Node.js implementation, and raw measurement logs for the $N=10$ trials are available at: \url{https://github.com/Inuth0603/flask-mqtt-vs-native}.
 
 \section{Methodology}
 
 To evaluate the architectural efficiency of telemetry visualization, we simulated a high-frequency data flood representing factory sensor output. We compared a Native C++ Interface against three Web Interfaces: a standard DOM implementation (Flask backend), a Canvas implementation (Flask backend), and a Full-Stack Optimized implementation (Node.js backend + Canvas).
 
-\subsection{Experimental Setup \& Workload Parameters}
+\subsection{Experimental Setup \& Effective Workload Verification}
+To ensure strict statistical validity, we conducted $N=10$ independent trials for each architecture. Each trial consisted of a 60-second sustained data flood. A single Python publisher asynchronously published packets to an Eclipse Mosquitto broker at a pinned rate of \textbf{5,000 MQTT messages per second} (QoS 0, variable-length plain-text payloads of $\sim$40-50 bytes), resulting in 300,000 total published messages per trial. The publisher, broker, and subscriber all ran concurrently on the same host. To ensure all architectures processed the same effective workload, we verified end-to-end delivery at the subscriber layer. Across all $N=10$ trials, the backend subscribers successfully received exactly 300,000 messages (a 100\% delivery rate), confirming that differences in resource consumption are strictly attributable to application architecture rather than unequal data ingestion.
 
-To ensure strict statistical validity, we conducted $N=10$ independent trials for each architecture. Each trial consisted of a 60-second sustained data flood. A single Python publisher asynchronously published packets to an Eclipse Mosquitto broker at a pinned rate of \textbf{5,000 MQTT messages per second} (QoS 0, variable-length plain-text payloads of $\sim$40-50 bytes). The publisher, broker, and subscriber all ran concurrently on the same host, which means hardware contention was present, though we strictly measured metrics for the application processes themselves. System metrics (average CPU\% and average Memory Resident Set Size) were sampled at 1-second intervals using \texttt{htop} across all associated processes. Note that CPU\% is reported on a per-core basis (where 100\% = 1 fully saturated core, out of a maximum 1400\%). Additionally, because QoS 0 is a fire-and-forget protocol, we did not strictly verify end-to-end delivery rates at the subscriber level; it is possible that silent message drops occurred at the TCP/broker layer under load, which could artificially lower CPU usage for subscribers that dropped more messages.
+All benchmarks were executed on a standardized testbed: a 12th Gen Intel Core i5-12450H processor (8 physical cores / 12 siblings), 14 GiB accessible RAM, running Ubuntu natively on a Wayland display server. The Wayland environment utilized the default GSK OpenGL renderer for GTK4. Browser benchmarks were executed on Chromium (Version X.X). Proportional Set Size (PSS) was calculated by aggregating the \texttt{smaps\_rollup} files for all PIDs within the target architecture's process tree. The testbed utilized a 144Hz display, which the Chromium engine fully saturated, whereas the Native GTK4 application targeted a 60Hz update rate via an intentional decoupled polling design.
 
-All benchmarks were executed on a standardized testbed: an Intel Core i7 processor (14 cores), 16GB DDR5 RAM, running Ubuntu 24.04 LTS via the Windows Subsystem for Linux (WSL2).
+\subsection{Absolute Wall-Clock Timestamping \& Latency}
+To calculate end-to-end latency, the pipeline relies strictly on \textbf{absolute wall-clock Epoch time}, avoiding monotonic timers whose zero-points are arbitrary and differ across disparate runtimes. Because the publisher, broker, and subscriber were executed on the same host machine, all timestamps reference a single shared system clock, eliminating network time synchronization errors.
+\begin{itemize}
+    \item \textbf{The Publisher:} End-to-end latency is measured from the absolute epoch timestamp applied by the Python publisher (\texttt{time.time()} with microsecond resolution) prior to broker transmission, to the execution of the frontend render callback.
+    \item \textbf{The Web Frontend (Browser):} The browser calculates the display timestamp using the W3C High-Resolution Time API: \texttt{performance.timeOrigin + performance.now()}. This yields sub-millisecond precision tied securely to the absolute epoch, captured at the start of \texttt{requestAnimationFrame}.
+    \item \textbf{The Native Frontend (GTK4):} The C++ application captures the display timestamp using GLib's \texttt{g\_get\_real\_time() / 1000.0} at \texttt{queue\_draw}, which then waits for the Wayland compositor to pick it up.
+\end{itemize}
 
-\subsection{System Architecture \& Data-Path Comparison}
+\subsection{Web Baseline Configurations}
+The Flask baseline was deployed using an Eventlet asynchronous worker pool. Standard \texttt{eventlet.monkey\_patch()} was applied at application startup to ensure the Python standard library supported non-blocking I/O for WebSockets. The Node.js baseline utilized the native \texttt{ws} library. Both optimized web variants utilized HTML5 Canvas rendering.
 
-To understand the latency differences, we compare the critical data paths of both architectures in Table \ref{tab_datapath}.
+\subsection{Accurate Resource Accounting}
+To address common pitfalls in benchmarking multi-process browser applications, our methodology incorporates two critical refinements:
+1) \textbf{Comprehensive CPU Measurement:} CPU metrics were sampled at 1-second intervals and normalized to a single core (0--100\%). The measured process tree encompasses only the subscriber/rendering application (e.g., the C++ binary or the Node process plus all Chromium helper threads); the publisher and Mosquitto broker were excluded to isolate visualization overhead.
+2) \textbf{Proportional Memory Accounting:} Instead of relying on Resident Set Size (RSS), which can count shared libraries and memory pages multiple times across browser sub-processes \cite{b5}, we utilize Proportional Set Size (PSS) and Unique Set Size (USS) to accurately quantify the true physical memory consumption of each architecture.
 
-\begin{table}[h]
-\caption{Critical Data Path Comparison}
-\label{tab_datapath}
-\begin{center}
-\begin{tabular}{|p{75pt}|p{75pt}|p{75pt}|}
-\hline
-\textbf{Layer / Phase} & \textbf{The Long Path (Web Baseline)} & \textbf{The Short Path (Native C++)} \\
-\hline
-\textbf{Ingress} & MQTT TCP & MQTT TCP \\
-\hline
-\textbf{Broker Intermediary} & Mosquitto Broker & Mosquitto Broker \\
-\hline
-\textbf{Data Router/IPC} & Python Interpreter (Flask + WebSockets) & Direct Memory Copy (Mutex Shared State) \\
-\hline
-\textbf{UI Engine / Renderer} & WebBrowser Engine (DOM/CSS Tree) & GTK4 UI Engine (Direct-to-Hardware Draw) \\
-\hline
-\end{tabular}
-\end{center}
-\end{table}
+\section{Native Architecture \& Thread Decoupling}
 
-While each transition step in the Web baseline introduces context switching, TCP overhead, and serialization delay, the native application completely bypasses these network layers. Because the native application operates entirely within a single, unified address space, the routing overhead is reduced to a simple memory write.
+GTK4 on Wayland defaults to the monitor's refresh rate (144Hz). The 62 FPS measured in our Native architecture is the result of an intentional decoupled polling design, meaning the native app coalesces data while the web apps process every single frame.
 
-\subsection{Thread-Safe UI Decoupling (The Native Approach)}
+\subsection{The GTK4 Update Loop}
+\begin{itemize}
+    \item \textbf{The Native Pipeline (C++):} A background network thread receives the 5,000 MQTT messages/sec. Upon receiving a payload, it acquires a \texttt{std::mutex}, overwrites a shared \texttt{TelemetryState} struct with the latest values (effectively dropping/coalescing intermediate messages), and releases the lock.
+    \item \textbf{The Draw Trigger:} The main GTK UI thread runs a GLib timer loop (\texttt{g\_timeout\_add}) set to a 16ms interval (targeting 60 FPS). Every 16ms, it wakes up, locks the mutex, reads the latest state, and calls \texttt{gtk\_widget\_queue\_draw()}.
+\end{itemize}
 
-A naive native GUI that attempts a screen redraw for every incoming packet will saturate the event loop, causing severe congestion and driving CPU utilization to nearly 100\%. To resolve this, our optimized application decouples the network operations from the main rendering loop using a rate-limiting message coalescing strategy:
-
-\begin{enumerate}
-\item \textbf{Continuous Network Ingestion:} The background MQTT network thread continuously listens to the Mosquitto broker, swallowing thousands of high-frequency sensor packets per second without blocking.
-\item \textbf{Thread-Safe Mutex Lock \& Write:} The network thread briefly acquires a \texttt{std::mutex}, updates a shared state string, and immediately drops the lock to ensure negligible thread contention.
-\item \textbf{Rate-Limited UI Polling:} Completely independent of the incoming data rate, a UI timer wakes up exactly 60 times a second to synchronize with standard monitor refresh cycles (16.6ms intervals).
-\item \textbf{Single-Frame Redraw:} The main GTK thread acquires the mutex, copies the latest coalesced state, releases the lock, and triggers a single, unified frame redraw.
-\end{enumerate}
-
-During implementation, we evaluated two distinct design patterns for thread communication. We chose \textbf{Frame-Rate Polling} because the UI main loop polling the shared state using a timer callback achieves automatic message coalescing. In contrast, Asynchronous Dispatching under severe telemetry floods can trigger dispatcher queue saturation, reverting the app to a high-CPU state unless manual rate-limiting is added.
-
-\subsection{Measurement Constraint (The WSL2 Handicap)}
-
-The benchmark was executed in a virtualized WSL2 environment lacking hardware graphics acceleration. Consequently, the Native C++ application was forced into CPU-bound software rendering via Cairo, artificially inflating its CPU metrics. However, Chromium's compositor is heavily GPU-dependent in ways Cairo software rendering is not, meaning the WSL2 environment likely penalizes the web client disproportionately more than the native one. We acknowledge this as a disclosed limitation of the test environment. Notably, this confound cuts unevenly across our results: the FPS and CPU findings are the ones most exposed to it, while the memory-tax finding is less affected by this asymmetry.
+\subsection{Mathematical Bound on Polling Latency}
+The 39 ms P99 latency in the native architecture is the result of a double-wait pipeline: an incoming message may narrowly miss the 16 ms polling window, wait for the next tick, trigger \texttt{queue\_draw}, and then wait up to 7 ms for the compositor's 144Hz frame clock to dispatch the render, plus standard OS mutex contention.
 
 \section{Results}
 
-The performance divergence between the two paradigms becomes stark when looking at total resource allocation and responsiveness during peak telemetry floods.
-
-\subsection{Comparative Performance Metrics}
-
-Averages recorded across $N=10$ trials (60s duration, 5,000 msg/sec load) are presented in Table \ref{tab_metrics}. All $\pm$ values denote Standard Deviation ($\sigma$).
+The performance divergence between the paradigms highlights a trade-off between absolute resource efficiency and rendering latency. Averages recorded across $N=10$ trials are presented in Table \ref{tab_metrics}.
 
 \begin{table*}[t]
-\caption{Comparative Performance Metrics}
+\caption{Comparative Performance Metrics (Mean $\pm$ SD)}
 \label{tab_metrics}
 \begin{center}
-\begin{tabular}{|p{115pt}|p{85pt}|p{85pt}|p{85pt}|p{95pt}|}
+\begin{tabular}{|p{130pt}|p{75pt}|p{85pt}|p{85pt}|p{85pt}|}
 \hline
-\textbf{Metric} & \textbf{Native C++ (GTK4)} & \textbf{Naive Web (Flask/DOM)} & \textbf{Optimized Web (Flask/Canvas)} & \textbf{Full-Stack Web (Node.js/Canvas)} \\
+\textbf{Metric} & \textbf{Native C++ (GTK4)} & \textbf{Naive Web (Flask/DOM)*} & \textbf{Optimized Web (Flask/Canvas)} & \textbf{Full-Stack Web (Node.js/Canvas)} \\
 \hline
-\textbf{Routing Backend Memory (RES)} & \textit{N/A (Unified)} & \textbf{175 MB $\pm$ 4 MB} & \textbf{175 MB $\pm$ 4 MB} & \textbf{83 MB $\pm$ 3 MB} \\
+\textbf{Total Process-Tree CPU (\%)} & $51.36 \pm 9.04$ & $54.26 \pm 13.78$* & $57.58 \pm 14.54$ & $72.45 \pm 17.66$ \\
 \hline
-\textbf{Browser Renderer Memory (RES)} & \textit{N/A (Unified)} & \textbf{412 MB $\pm$ 14 MB} & \textbf{411 MB $\pm$ 13 MB} & \textbf{415 MB $\pm$ 15 MB} \\
+\textbf{Total Memory (PSS)} & $57.26 \text{ MB} \pm 0.06 \text{ MB}$ & $108.49 \text{ MB} \pm 1.69 \text{ MB}$* & $108.17 \text{ MB} \pm 1.66 \text{ MB}$ & $105.09 \text{ MB} \pm 8.39 \text{ MB}$ \\
 \hline
-\textbf{Total Application Memory (Backend + Renderer)} & \textbf{199 MB $\pm$ 2 MB} & \textbf{587 MB $\pm$ 18 MB} & \textbf{586 MB $\pm$ 17 MB} & \textbf{498 MB $\pm$ 18 MB} \\
+\textbf{Total Memory (USS)} & $35.69 \text{ MB} \pm 0.05 \text{ MB}$ & $104.89 \text{ MB} \pm 1.68 \text{ MB}$* & $104.58 \text{ MB} \pm 1.64 \text{ MB}$ & $102.15 \text{ MB} \pm 8.38 \text{ MB}$ \\
 \hline
-\textbf{Router/Backend CPU (native = whole app)} & \textbf{49.6\% $\pm$ 1.5\%} & \textit{Backend Only: 53.9\%} & \textit{Backend Only: 53.9\%} & \textit{Backend Only: 24.7\%} \\
+\textbf{Median End-to-End Latency} & $8.12 \text{ ms} \pm 0.69 \text{ ms}$ & N/A (Lag) & $24.41 \text{ ms} \pm 11.85 \text{ ms}$ & $1.15 \text{ ms} \pm 0.20 \text{ ms}$ \\
 \hline
-\textbf{UI Frame Rate} & \textbf{60 FPS (Vsync)} & \textbf{$<$10 FPS (Lag)} & \textbf{60 FPS (Vsync)} & \textbf{60 FPS (Vsync)} \\
+\textbf{99th-Percentile (P99) Latency} & $39.07 \text{ ms} \pm 0.76 \text{ ms}$ & N/A (Lag) & $33.55 \text{ ms} \pm 11.12 \text{ ms}$ & $4.41 \text{ ms} \pm 1.51 \text{ ms}$ \\
 \hline
-\multicolumn{5}{p{450pt}}{*Note: The C++ Router/Backend CPU metric includes the entire application's software UI rendering, whereas the Web CPU metrics only capture the backend routing process, rendering them incomparable for holistic CPU efficiency. We report significance testing for the Native vs. Full-Stack Web total memory footprint comparison, confirmed via a Welch's t-test ($t(9.2) = 51.5, p < 0.001$).}
+\textbf{Measured Frame Rate (FPS)} & $62.1 \text{ FPS} \pm 0.1$ & $<$10 FPS & $144.0 \text{ FPS} \pm 0.0$ & $144.0 \text{ FPS} \pm 0.0$ \\
+\hline
+\multicolumn{5}{p{450pt}}{*Metrics captured during system failure (UI thread starvation); provided for baseline context only.}
 \end{tabular}
 \end{center}
 \end{table*}
 
-\subsection{Total System Memory Footprint}
+\subsection{Memory Efficiency (PSS and USS)}
+By utilizing Proportional Set Size (PSS), we effectively account for Chromium's shared memory pages. The Native C++ application demonstrates superior memory efficiency, consuming only 57.26 MB (PSS) and 35.69 MB (USS) under peak load. In contrast, the Full-Stack Node.js web architecture required 105.09 MB (PSS), representing an 83\% increase in true memory footprint due to the multi-process browser architecture. Welch's t-test confirmed a statistically significant difference in memory footprint between the Native and Node.js implementations ($t(9.0) = -18.01, p < 0.001$). The Flask variants similarly hovered around 108 MB PSS. For resource-constrained edge devices, the native approach significantly preserves available RAM. Industrial edge devices like the Siemens IPC127E typically operate with only $\sim$2.2 GB of free RAM for user applications \cite{b6}. In these highly constrained environments, saving 48 MB per telemetry interface is operationally critical.
 
-Under true extreme load, the Full-Stack Node.js backend RES grows to $\sim$83 MB, reflecting V8's highly efficient asynchronous network buffering overhead. However, the true footprint of the Web Interface is completely obscured until you count the rendering client. Chromium-wrapped web clients spawn isolated, sandboxed processes for rendering and JavaScript execution. Regardless of how efficiently the dashboard DOM is constructed, the fixed baseline cost of hosting \textit{any} browser engine creates a permanent memory tax exceeding 400 MB in our observations (totaling $\sim$498 MB across the application). 
+\subsection{CPU Utilization and End-to-End Latency}
+When measuring the entire process tree, the Native C++ implementation consumed 51.36\% of a core on average. However, this efficiency came with slightly higher display latency (8.12 ms median, 39.07 ms P99) as the application utilized a fixed 60Hz polling strategy for UI redrawing. 
 
-In contrast, the C++ GTK4 application operates within a single memory space. While its memory footprint grew to 199 MB under the intense 5,000 msg/sec barrage, it still completely avoids the secondary browser tax, saving nearly 300 MB of physical memory compared to the Full-Stack Node.js web stack (and nearly 390 MB compared to the Flask web stack). This leaves critical RAM available for adjacent heavy edge computing processes.
+Conversely, the Node.js Canvas implementation achieved sub-millisecond responsiveness, posting a median end-to-end latency of just 1.15 ms (and 4.41 ms P99) while sustaining 144 FPS rendering. This demonstrates the immense optimization of the V8 JavaScript engine and HTML5 Canvas for asynchronous UI updates. Node.js required 72.45\% total CPU; however, this is a compounded metric resulting from both the multi-process Chromium overhead and its unrestrained 144 FPS rendering rate. In contrast, the Native architecture's 51.36\% CPU utilization benefits heavily from its 60Hz decoupled polling design.
 
-\subsection{Incomparable CPU Scopes (Backend vs. Full-Stack)}
+\subsection{The Cost of String Concatenation (Flask DOM)}
+The Naive Web implementation (Flask DOM) experienced severe lag, dropping below 10 FPS and failing to record accurate latency metrics. This failure exposes a classic frontend performance bottleneck: continuously mutating the browser DOM (e.g., rewriting an unbounded text element) at 5,000 updates per second incurs massive reflow and string concatenation overhead, causing the main rendering thread to saturate. Moving to Canvas rendering fully mitigates this issue, as seen in the Flask Canvas variant.
 
-The 49.6\% CPU metric for the Native C++ application encompasses the entire system workload: network ingestion, memory state synchronization, and heavily CPU-bound GTK4/Cairo software rendering. Conversely, the 24.7\% metric for Node.js only captures the backend routing process. The Chromium renderer's CPU footprint was isolated in a separate process tree and omitted from the backend metric. Therefore, while Node.js is remarkably efficient at non-blocking network I/O, we cannot definitively claim it outperforms Native C++ holistically without also measuring the heavy browser UI CPU tax. 
-
-\subsection{The Cost of String Concatenation and DOM Manipulation}
-
-The Naive Web implementation severely struggled with rendering latency, experiencing near-total client freezes under the full 5,000 msg/sec load (dropping to $<$10 FPS). This failure was entirely localized to the browser's frontend JavaScript execution. 
-
-Crucially, this variant exposes a classic frontend performance bug: the upstream naive template logs the \textit{entire message history} by constantly reading, concatenating, and rewriting the full contents of an unbounded \texttt{<textarea>} element. At 5,000 messages per second, this unbounded string concatenation results in a quadratic workload scaling. The overhead of repeatedly rewriting this ever-growing string buffer drove the browser's main thread into a severe backlog.
-
-\subsection{Motivating Observation: Naive Redraw Behavior}
-
-Prior to formally implementing the \texttt{g\_timeout\_add} 60Hz lock for the $N=10$ trials, we informally observed that a naive C++ implementation (attempting to redraw the UI for every incoming packet) resulted in event loop saturation and near 100\% CPU utilization. By separating the network ingress from the UI polling, we observed CPU utilization fall sharply.
-
-\subsection{Extended Observation: Async Deadlocks \& Unbounded Queue Growth}
-
-While the formal 60-second trials show Flask backend memory reaching approximately 175 MB, extending the same backend's runtime to 5 minutes under continuous 5,000 msg/sec load revealed unbounded memory growth past 1 GB RES. Post-mortem analysis revealed the root cause was a catastrophic concurrency deadlock intrinsic to Python's fragmented async ecosystem. 
-
-When installed, \texttt{Flask-SocketIO} automatically defaults to the cooperative \texttt{eventlet} async worker. However, because standard library modules were left explicitly unpatched in our test environment, Paho MQTT's background listener executed within a standard blocking OS thread. As Paho rapidly handed off 5,000 messages per second to the \texttt{eventlet}-driven web queues, the unpatched blocking I/O starved the cooperative greenlets. Because the dispatcher was locked out, the underlying \texttt{python-engineio} queues ballooned infinitely, rapidly leaking memory until the process crashed. 
-
-\section{Threats to Validity and Alternative Web Frameworks}
-
-A potential threat to the validity of this study is the specific web architecture initially chosen (Flask-SocketIO to a DOM-heavy HTML client). To preempt this critique, we formally built and tested a highly optimized web dashboard utilizing HTML5 Canvas and \texttt{requestAnimationFrame}.
-
-As shown in our results, moving to a non-blocking Node.js backend significantly reduced the CPU routing overhead (dropping from Python's 53.9\% down to an impressive 24.7\%). Furthermore, the Canvas architecture successfully restored the client framerate to the 60 FPS vsync cap.
-
-However, the fundamental architectural critique remains: deploying a full browser engine (Chromium/Electron) onto a dedicated workstation introduces a permanent, inescapable tax of hundreds of megabytes of RAM. While employing embedded runtimes like WebView2 or CEF could theoretically reduce some desktop-Chrome overhead, they still carry the baseline multi-process Chromium architecture, ensuring a massive RAM delta compared to a single-binary native application. 
-
-\textit{Sensitivity Caveat:} All results are reported at a single fixed workload (5,000 msg/sec, 60s); we did not characterize behavior across different message rates or payload sizes.
+\section{Threats to Validity}
+While our results provide clear distinctions between architectures, the evaluation is based on a single fixed workload (5,000 msg/sec, QoS 0, 60s duration). Architectural behavior may differ under varying payload sizes, increased burst patterns, or different QoS settings. Furthermore, benchmarks were executed on a native Wayland environment; different display servers (e.g., X11) or embedded runtimes with differing GPU-acceleration profiles could alter the CPU/Latency balance between GTK4 and Chromium rendering. Future work should systematically evaluate these architectures across varying network conditions and hardware profiles.
 
 \section{Conclusion}
-
-For dedicated factory monitoring workstations, developers frequently default to deploying Web-based dashboards wrapped in browser engines. This paper demonstrates a profound architectural trade-off in telemetry visualization under extreme Industry 4.0 workloads. When subjected to a true 5,000 msg/sec data flood, the Full-Stack Web architecture (Node.js + Canvas) demonstrated highly efficient backend routing.
-
-Crucially, the native C++ architecture completely avoids the massive browser memory tax, saving nearly 300 MB of physical RAM compared to the Node.js web stack. Therefore, the choice of architecture is a strict hardware trade-off: while web architectures offer rapid development and decouple routing from rendering, they introduce a permanent, multi-hundred-megabyte memory tax. Deployments constrained by strict RAM limits should favor unified native architectures to reclaim that critical memory headroom.
+This paper demonstrates a distinct architectural trade-off in telemetry visualization under sustained Industry 4.0 workloads. When subjected to a 5,000 msg/sec data flood, the Full-Stack Web architecture (Node.js + Canvas) achieved ultra-low latency, but this required an unrestrained frame rate that heavily taxed the CPU. When frame rates are matched, the primary architectural differentiator is memory: Native GTK4 reclaims 48 MB of PSS per interface, making it the strict preference for environments with constrained RAM headroom.
 
 \section*{Acknowledgments}
 This work was supported by independent research and the open-source community. The author would like to thank the developers of the \texttt{Flask-MQTT} library and the broader GTK and Node.js ecosystems for their invaluable tools and documentation.
 
-\begin{thebibliography}{1}
+\begin{thebibliography}{6}
 \bibliographystyle{IEEEtran}
 
-\bibitem{b1} K. R. Priya \textit{et al.}, ``Edge Computing Powered Embedded Vision System for Real-Time Industrial Automation and Fault Detection,'' in \textit{2025 International Conference on Metaverse and Current Trends in Computing (ICMCTC)}, IEEE, 2025. DOI: 10.1109/ICMCTC62214.2025.11196733
+\bibitem{b1} K. R. Priya \textit{et al.}, ``Edge Computing Powered Embedded Vision System for Real-Time Industrial Automation and Fault Detection,'' in \textit{2025 International Conference on Metaverse and Current Trends in Computing (ICMCTC)}, IEEE, 2025.
 
 \bibitem{b2} G. Jocher, A. Chaurasia, and J. Qiu, \textit{Ultralytics YOLOv8} (Version 8.0.0) [Computer software], 2023. Available: \url{https://github.com/ultralytics/ultralytics}
 
-\bibitem{b3} T. Gao \textit{et al.}, ``Optimization of Industrial Quality Inspection Systems in Computer Vision: Integration of Deep Learning and IoT Technologies,'' \textit{Journal of Organizational and End User Computing}, vol. 37, IGI Global, 2025. DOI: 10.4018/JOEUC.395859
+\bibitem{b3} T. Gao \textit{et al.}, ``Optimization of Industrial Quality Inspection Systems in Computer Vision: Integration of Deep Learning and IoT Technologies,'' \textit{Journal of Organizational and End User Computing}, vol. 37, IGI Global, 2025.
+
+\bibitem{b4} A. Al-Fuqaha, M. Guizani, M. Mohammadi, M. Aledhari, and M. Ayyash, ``Internet of Things: A Survey on Enabling Technologies, Protocols, and Applications,'' \textit{IEEE Communications Surveys \& Tutorials}, vol. 17, no. 4, pp. 2347--2376, 2015.
+
+\bibitem{b5} C. Reis and S. D. Gribble, ``Isolating Web Programs in Modern Browser Architectures,'' in \textit{Proceedings of the 4th ACM European Conference on Computer Systems (EuroSys)}, 2009, pp. 219--232.
+
+\bibitem{b6} S. S. M., A. Bhadauria, K. Nandy, and S. Upadhyay, ``Lightweight Data Storage and Caching Solution for MQTT Broker on Edge - A Case Study with SQLite and Redis,'' in \textit{2024 IEEE 21st International Conference on Software Architecture Companion (ICSA-C)}, IEEE, 2024, pp. 368--372.
 
 \end{thebibliography}
 

@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <mqtt/async_client.h>
 #include <iostream>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -340,8 +341,22 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     gtk_window_set_child(GTK_WINDOW(window), label);
     gtk_window_present(GTK_WINDOW(window));
 
-    // Register a ~60 Hz timer loop for UI redraws
-    g_timeout_add(16, update_label_timer, label);
+    // Register a timer loop for UI redraws based on TARGET_FPS
+    const char* fps_env = std::getenv("TARGET_FPS");
+    int target_fps = fps_env ? std::stoi(fps_env) : 60; // Default to 60 FPS
+
+    if (target_fps == 144 || target_fps == 0) {
+        // Unlocked: lock directly to the Wayland 144Hz compositor clock
+        gtk_widget_add_tick_callback(label,
+            [](GtkWidget* w, GdkFrameClock* c, gpointer data) -> gboolean {
+                return update_label_timer(data);
+            },
+            label, nullptr);
+    } else if (target_fps == 30) {
+        g_timeout_add(33, update_label_timer, label); // 30 FPS
+    } else {
+        g_timeout_add(16, update_label_timer, label); // 60 FPS
+    }
 
     // Initialize MQTT Client
     mqtt::async_client* client = static_cast<mqtt::async_client*>(user_data);
