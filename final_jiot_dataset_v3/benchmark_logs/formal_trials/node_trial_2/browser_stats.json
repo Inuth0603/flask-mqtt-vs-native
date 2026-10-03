@@ -1,0 +1,16 @@
+{
+  "type": "benchmark_stats",
+  "frontend_messages_received": 287754,
+  "last_fps": 144,
+  "frame_time_samples_count": 8607,
+  "display_latency_samples_count": 8240,
+  "frame_time_mean_ms": 6.971070059254094,
+  "frame_time_median_ms": 6.900000000001455,
+  "frame_time_p99_ms": 7.099999999998545,
+  "frame_time_max_ms": 62.5,
+  "dropped_frames": 2,
+  "display_latency_median_us": 1202.93,
+  "display_latency_p95_us": 2164.258828125,
+  "display_latency_p99_us": 4563.66234375,
+  "display_latency_mean_us": 1356.147250237032
+}

@@ -1,0 +1,12 @@
+messages_received=300000
+routing_latency_median_us=172.91
+routing_latency_p95_us=549.42
+routing_latency_p99_us=8598.83
+display_latency_median_us=18351.104765625
+display_latency_p95_us=18832.795703125
+display_latency_p99_us=18832.795703125
+frontend_messages_received=260
+last_fps=144
+frame_time_mean_ms=6.948
+frame_time_max_ms=34.700
+dropped_frames=1

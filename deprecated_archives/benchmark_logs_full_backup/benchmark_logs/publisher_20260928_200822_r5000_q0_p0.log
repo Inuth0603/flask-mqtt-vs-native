@@ -1,0 +1,8 @@
+trial_id=20260928_200822
+target_rate=5000
+qos=0
+payload_size=0
+duration_target=10
+messages_published=50000
+elapsed_seconds=10.0001
+achieved_rate=4999.97

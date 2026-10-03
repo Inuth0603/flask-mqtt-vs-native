@@ -1,0 +1,8 @@
+messages_received=300000
+measured_fps=62.1851
+display_latency_median_us=8936.1
+display_latency_p95_us=29573.5
+display_latency_p99_us=39872.7
+frame_time_mean_us=16092.5
+frame_time_max_us=16300
+dropped_frames=0
