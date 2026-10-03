@@ -1,5 +1,0 @@
-messages_received=50000
-measured_fps=62.2307
-latency_median_us=15533.8
-latency_p95_us=38395.8
-latency_p99_us=40398.8

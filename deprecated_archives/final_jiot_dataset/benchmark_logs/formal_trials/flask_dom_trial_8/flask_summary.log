@@ -1,4 +1,0 @@
-messages_received=300000
-routing_latency_median_us=139.62
-routing_latency_p95_us=477.75
-routing_latency_p99_us=8717.56

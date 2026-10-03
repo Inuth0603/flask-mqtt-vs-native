@@ -1,8 +1,0 @@
-trial_id=native_2
-target_rate=5000
-qos=0
-payload_size=0
-duration_target=60
-messages_published=299999
-elapsed_seconds=60.0000
-achieved_rate=4999.98
